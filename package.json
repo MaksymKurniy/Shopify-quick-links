@@ -1,0 +1,29 @@
+{
+	"name": "shopify-quick-links",
+	"displayName": "Shopify Quick Links",
+	"description": "A Visual Studio Code extension that provides quick access to Shopify documentation and resources directly from the editor.",
+	"version": "0.0.1",
+	"publisher": "MaksymKurniy",
+	"repository": "https://github.com/MaksymKurniy/shopify-quick-links",
+	"engines": {
+		"vscode": "^1.54.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"tags": [
+		"shopify"
+	],
+	"main": "./src/extension.js",
+	"scripts": {
+		"package": "vsce package",
+		"test": "jest"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.54.0",
+		"jest": "^30.0.4"
+	},
+	"dependencies": {
+		
+	}
+}
