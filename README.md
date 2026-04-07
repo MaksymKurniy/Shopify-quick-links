@@ -47,7 +47,68 @@ The extension needs your Shopify store handle to generate store-specific links. 
 
 #### Option 1: Using the Panel (Recommended)
 1. Open the Shopify Quick Links panel
-2. Click "🏪 Set Store Handle" in the Actions section
+2. Click "Set Store Handle" in the Actions section
+3. Enter your store handle (e.g., `my-store` for `my-store.myshopify.com`)
+
+#### Option 2: Via Settings
+Open VS Code settings and search for `shopifyQuickLinks.storeHandle`
+
+### Custom Documentation Links
+
+You can override the default documentation links with your own:
+
+```json
+{
+  "shopifyQuickLinks.documentationLinks": [
+    {
+      "label": "My Custom Doc",
+      "url": "https://my-docs.com",
+      "icon": "book",
+      "tooltip": "Custom documentation"
+    }
+  ]
+}
+```
+
+### Custom Categories
+
+Add your own categories with custom links:
+
+```json
+{
+  "shopifyQuickLinks.customCategories": [
+    {
+      "name": "My Tools",
+      "icon": "tools",
+      "links": [
+        {
+          "label": "Analytics Dashboard",
+          "url": "https://analytics.example.com",
+          "icon": "graph",
+          "tooltip": "View analytics"
+        },
+        {
+          "label": "Design System",
+          "url": "https://design.example.com",
+          "icon": "paintcan"
+        }
+      ]
+    },
+    {
+      "name": "CI/CD",
+      "icon": "rocket",
+      "links": [
+        {
+          "label": "GitHub Actions",
+          "url": "https://github.com/my-repo/actions"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Available icons:** `link`, `book`, `rocket`, `tools`, `graph`, `paintcan`, `package`, `globe`, `shield`, `terminal`, `database`, `code`, `settings-gear`, `github`, `extensions` and [many more](https://code.visualstudio.com/api/references/icons-in-labels#icon-listing)
 3. Enter your store handle (e.g., "my-awesome-store")
 
 ### 📌 Quick Links

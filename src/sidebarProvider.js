@@ -16,44 +16,15 @@ class LinkItem extends vscode.TreeItem {
 }
 
 class CommandItem extends vscode.TreeItem {
-  constructor(label, command, icon, tooltip) {
+  constructor(label, commandId, icon, tooltip) {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.tooltip = tooltip || label;
     this.iconPath = new vscode.ThemeIcon(icon);
     this.command = {
-      command: 'quickLinks.runCommand',
-      title: 'Run Command',
-      arguments: [command],
+      command: commandId,
+      title: label,
     };
     this.contextValue = 'command';
-  }
-}
-
-class TaskItem extends vscode.TreeItem {
-  constructor(label, taskName, icon, tooltip) {
-    super(label, vscode.TreeItemCollapsibleState.None);
-    this.tooltip = tooltip || label;
-    this.iconPath = new vscode.ThemeIcon(icon);
-    this.command = {
-      command: 'quickLinks.runTask',
-      title: 'Run Task',
-      arguments: [taskName],
-    };
-    this.contextValue = 'task';
-  }
-}
-
-class DynamicLinkItem extends vscode.TreeItem {
-  constructor(label, urlTemplate, icon, tooltip) {
-    super(label, vscode.TreeItemCollapsibleState.None);
-    this.tooltip = tooltip || label;
-    this.iconPath = new vscode.ThemeIcon(icon);
-    this.command = {
-      command: 'quickLinks.openDynamicUrl',
-      title: 'Open Dynamic Link',
-      arguments: [urlTemplate],
-    };
-    this.contextValue = 'dynamicLink';
   }
 }
 
@@ -85,11 +56,6 @@ class QuickLinksProvider {
   constructor() {
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
-    this.getThemeId = null;
-  }
-
-  setThemeId(getThemeIdFn) {
-    this.getThemeId = getThemeIdFn;
   }
 
   refresh() {
@@ -102,7 +68,6 @@ class QuickLinksProvider {
 
   getChildren(element) {
     if (!element) {
-      // Get current handle for display
       const config = vscode.workspace.getConfiguration('shopifyQuickLinks');
       let storeHandle = config.get('storeHandle');
 
@@ -111,12 +76,20 @@ class QuickLinksProvider {
         storeHandle = workspaceFolder ? workspaceFolder.name : 'not-set';
       }
 
-      return [
+      const categories = [
         new CategoryItem('Actions', 'rocket'),
         new CategoryItem(`Store: ${storeHandle}`, 'home'),
         new CategoryItem('Quick Links', 'star'),
         new CategoryItem('Documentation', 'book'),
       ];
+
+      // Add custom categories from settings
+      const customCategories = config.get('customCategories') || [];
+      for (const cat of customCategories) {
+        categories.push(new CategoryItem(cat.name, cat.icon || 'link'));
+      }
+
+      return categories;
     }
 
     // Check if this is Store category
@@ -126,23 +99,14 @@ class QuickLinksProvider {
     switch (categoryKey) {
       case 'Actions':
         return [
-          new CommandItem('Set Store Handle', 'quickLinks.setStoreHandle', 'edit', 'Configure your Shopify store handle'),
-          new TaskItem('Shopify Theme Dev', 'Shopify: Theme Dev', 'play', 'Start Shopify theme development server'),
-          new TaskItem('Pull Theme JSON', 'Shopify: Theme Pull (json only)', 'cloud-download', 'Pull theme JSON files only')
+          new CommandItem('Shopify Theme Dev', 'quickLinks.shopifyDev', 'play', 'Start Shopify theme development server'),
+          new CommandItem('Pull Theme JSON', 'quickLinks.shopifyPull', 'cloud-download', 'Pull theme JSON files only'),
+          new CommandItem('Set Store Handle', 'quickLinks.setStoreHandle', 'edit', 'Configure your Shopify store handle')
         ];
 
       case 'Store':
-        const themeId = this.getThemeId ? this.getThemeId() : null;
-        const frontendUrl = themeId 
-          ? 'https://{storeHandle}.myshopify.com?preview_theme_id=' + themeId
-          : 'https://{storeHandle}.myshopify.com';
-        const frontendTooltip = themeId 
-          ? 'Open store frontend with theme preview (theme: ' + themeId + ')'
-          : 'Open your Shopify store frontend';
-        const frontendIcon = themeId ? 'eye' : 'globe';
-        
         return [
-          new StoreItem('Store Frontend', frontendUrl, frontendIcon, frontendTooltip),
+          new StoreItem('Store Frontend', 'https://{storeHandle}.myshopify.com', 'globe', 'Open your Shopify store frontend'),
           new StoreItem('Store Admin', 'https://{storeHandle}.myshopify.com/admin', 'settings-gear', 'Open Shopify Admin Dashboard'),
           new StoreItem('Products', 'https://{storeHandle}.myshopify.com/admin/products', 'package', 'Manage store products'),
           new StoreItem('Themes', 'https://{storeHandle}.myshopify.com/admin/themes', 'paintcan', 'Manage store themes'),
@@ -150,12 +114,21 @@ class QuickLinksProvider {
 
       case 'Quick Links':
         return [
-          new LinkItem('Shopify partners', 'https://partners.shopify.com/stores', 'shield', 'Shopify Partner Dashboard'),
           new LinkItem('Shopify Community', 'https://community.shopify.com', 'comment-discussion', 'Shopify Community Forums'),
-          new DynamicLinkItem('Open Project on GitHub', 'https://github.com/{gitUser}/{workspaceName}', 'github-alt', 'Open current project on GitHub'),
+          new CommandItem('Open Git Repository', 'quickLinks.openGitRepo', 'github', 'Open remote git repository in browser'),
         ];
 
       case 'Documentation':
+        const config = vscode.workspace.getConfiguration('shopifyQuickLinks');
+        const customDocs = config.get('documentationLinks') || [];
+        
+        // Use custom documentation links if provided, otherwise use defaults
+        if (customDocs.length > 0) {
+          return customDocs.map(link => 
+            new LinkItem(link.label, link.url, link.icon || 'book', link.tooltip || link.label)
+          );
+        }
+        
         return [
           new LinkItem('Shopify CLI', 'https://shopify.dev/apps/tools/cli', 'terminal', 'Shopify Command Line Interface'),
           new LinkItem('GraphQL Admin API', 'https://shopify.dev/api/admin-graphql', 'database', 'Shopify Admin GraphQL API'),
@@ -166,6 +139,17 @@ class QuickLinksProvider {
         ];
 
       default:
+        // Check if this is a custom category
+        const config2 = vscode.workspace.getConfiguration('shopifyQuickLinks');
+        const customCategories = config2.get('customCategories') || [];
+        const customCat = customCategories.find(c => c.name === categoryKey);
+        
+        if (customCat && customCat.links) {
+          return customCat.links.map(link =>
+            new LinkItem(link.label, link.url, link.icon || 'link', link.tooltip || link.label)
+          );
+        }
+        
         return [];
     }
   }

@@ -27,6 +27,47 @@
           "default": "",
           "description": "Your Shopify store handle (e.g., 'my-store' for my-store.myshopify.com). If empty, workspace name will be used.",
           "examples": ["my-awesome-store", "demo-shop"]
+        },
+        "shopifyQuickLinks.documentationLinks": {
+          "type": "array",
+          "default": [],
+          "description": "Custom documentation links. Leave empty to use defaults. Each item should have: label, url, icon (optional), tooltip (optional).",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {"type": "string"},
+              "url": {"type": "string"},
+              "icon": {"type": "string"},
+              "tooltip": {"type": "string"}
+            },
+            "required": ["label", "url"]
+          }
+        },
+        "shopifyQuickLinks.customCategories": {
+          "type": "array",
+          "default": [],
+          "description": "Custom link categories. Each category should have: name, icon, links array.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string"},
+              "icon": {"type": "string"},
+              "links": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {"type": "string"},
+                    "url": {"type": "string"},
+                    "icon": {"type": "string"},
+                    "tooltip": {"type": "string"}
+                  },
+                  "required": ["label", "url"]
+                }
+              }
+            },
+            "required": ["name", "links"]
+          }
         }
       }
     },
@@ -35,6 +76,22 @@
         "command": "quickLinks.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "quickLinks.shopifyDev",
+        "title": "Shopify: Start Theme Dev"
+      },
+      {
+        "command": "quickLinks.shopifyPull",
+        "title": "Shopify: Pull Theme JSON"
+      },
+      {
+        "command": "quickLinks.setStoreHandle",
+        "title": "Shopify: Set Store Handle"
+      },
+      {
+        "command": "quickLinks.openGitRepo",
+        "title": "Open Git Repository"
       }
     ],
     "viewsContainers": {

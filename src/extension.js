@@ -1,145 +1,131 @@
 const vscode = require('vscode');
 const QuickLinksProvider = require('./sidebarProvider');
 
+// Helper functions
+const getWorkspaceFolder = () => vscode.workspace.workspaceFolders?.[0];
+
+const getStoreHandle = () => {
+  const config = vscode.workspace.getConfiguration('shopifyQuickLinks');
+  return config.get('storeHandle') || getWorkspaceFolder()?.name || null;
+};
+
+const runInTerminal = (name, command) => {
+  const folder = getWorkspaceFolder();
+  if (!folder) {
+    vscode.window.showErrorMessage('No workspace folder is open');
+    return;
+  }
+  
+  // Close existing terminal with same name
+  const existing = vscode.window.terminals.find(t => t.name === name);
+  if (existing) {
+    existing.dispose();
+  }
+  
+  const terminal = vscode.window.createTerminal({ name, cwd: folder.uri.fsPath });
+  terminal.show();
+  terminal.sendText(command);
+};
+
+const gitSshToHttps = (url) => {
+  if (url.startsWith('git@')) {
+    return url.replace(/^git@([^:]+):/, 'https://$1/').replace(/\.git$/, '');
+  }
+  if (url.startsWith('ssh://')) {
+    return url.replace(/^ssh:\/\/git@/, 'https://').replace(/\.git$/, '');
+  }
+  return url.replace(/\.git$/, '');
+};
+
 function activate(context) {
   const quickLinksProvider = new QuickLinksProvider();
   
-  // Global variable for theme ID
-  let currentThemeId = null;
-  
-  // Register TreeView
   const treeView = vscode.window.createTreeView('quickLinksSidebar', {
     treeDataProvider: quickLinksProvider,
     showCollapseAll: true
   });
-  
-  // Command for opening URLs
-  const openUrlCommand = vscode.commands.registerCommand('quickLinks.openUrl', (url) => {
-    vscode.env.openExternal(vscode.Uri.parse(url));
-  });
-  
-  // Command for store links
-  const openStoreUrlCommand = vscode.commands.registerCommand('quickLinks.openStoreUrl', async (urlTemplate) => {
-    const config = vscode.workspace.getConfiguration('shopifyQuickLinks');
-    let storeHandle = config.get('storeHandle');
-    
-    // If handle is not set, use workspace name
-    if (!storeHandle) {
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-      if (workspaceFolder) {
-        storeHandle = workspaceFolder.name;
-      } else {
-        vscode.window.showErrorMessage('No store handle configured and no workspace folder open');
+
+  // Auto-refresh on configuration change
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('shopifyQuickLinks')) {
+        quickLinksProvider.refresh();
+      }
+    })
+  );
+
+  const commands = {
+    'quickLinks.openUrl': (url) => vscode.env.openExternal(vscode.Uri.parse(url)),
+
+    'quickLinks.openStoreUrl': (urlTemplate) => {
+      const storeHandle = getStoreHandle();
+      if (!storeHandle) {
+        vscode.window.showErrorMessage('No store handle configured');
         return;
       }
-    }
-    
-    const storeUrl = urlTemplate.replace('{storeHandle}', storeHandle);
-    vscode.env.openExternal(vscode.Uri.parse(storeUrl));
-  });
-  
-  // Command for dynamic links
-  const openDynamicUrlCommand = vscode.commands.registerCommand('quickLinks.openDynamicUrl', async (urlTemplate) => {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      vscode.window.showErrorMessage('No workspace folder is open');
-      return;
-    }
-    
-    const workspaceName = workspaceFolder.name;
-    let gitUser = 'your-username'; // fallback
-    
-    // Try to get Git user from git config
-    try {
-      const gitConfig = await vscode.workspace.fs.readFile(
-        vscode.Uri.joinPath(workspaceFolder.uri, '.git', 'config')
-      );
-      const configText = gitConfig.toString();
-      const originMatch = configText.match(/url = .*github\.com[:/](.+?)\//);
-      if (originMatch) {
-        gitUser = originMatch[1];
-      }
-    } catch (error) {
-      // If failed to read git config, use fallback
-    }
-    
-    const dynamicUrl = urlTemplate
-      .replace('{workspaceName}', workspaceName)
-      .replace('{gitUser}', gitUser)
-      .replace('{workspaceBasename}', workspaceName);
-    
-    vscode.env.openExternal(vscode.Uri.parse(dynamicUrl));
-  });
+      vscode.env.openExternal(vscode.Uri.parse(urlTemplate.replace('{storeHandle}', storeHandle)));
+    },
 
-  // Command for setting store handle
-  const setStoreHandleCommand = vscode.commands.registerCommand('quickLinks.setStoreHandle', async () => {
-    const config = vscode.workspace.getConfiguration('shopifyQuickLinks');
-    const currentHandle = config.get('storeHandle') || '';
-    
-    const newHandle = await vscode.window.showInputBox({
-      prompt: 'Enter your Shopify store handle',
-      placeholder: 'my-awesome-store (without .myshopify.com)',
-      value: currentHandle,
-      validateInput: (value) => {
-        if (value && !/^[a-zA-Z0-9-]+$/.test(value)) {
-          return 'Store handle can only contain letters, numbers, and hyphens';
-        }
-        return null;
+    'quickLinks.openGitRepo': async () => {
+      const folder = getWorkspaceFolder();
+      if (!folder) {
+        vscode.window.showErrorMessage('No workspace folder is open');
+        return;
       }
-    });
-    
-    if (newHandle !== undefined) {
-      await config.update('storeHandle', newHandle, vscode.ConfigurationTarget.Workspace);
-      quickLinksProvider.refresh();
       
-      if (newHandle) {
-        vscode.window.showInformationMessage(`Store handle set to: ${newHandle}`);
-      } else {
-        vscode.window.showInformationMessage('Store handle cleared - will use workspace name');
+      try {
+        const gitConfig = await vscode.workspace.fs.readFile(
+          vscode.Uri.joinPath(folder.uri, '.git', 'config')
+        );
+        const match = gitConfig.toString().match(/\[remote "origin"\][\s\S]*?url\s*=\s*(.+)/m);
+        
+        if (!match) {
+          vscode.window.showErrorMessage('No git remote "origin" found');
+          return;
+        }
+        
+        vscode.env.openExternal(vscode.Uri.parse(gitSshToHttps(match[1].trim())));
+      } catch {
+        vscode.window.showErrorMessage('Not a git repository');
       }
-    }
-  });
-  
-  // Command for running VS Code commands
-  const runCommandCommand = vscode.commands.registerCommand('quickLinks.runCommand', (commandId) => {
-    vscode.commands.executeCommand(commandId);
-  });
-  
-  // Command for running tasks with Theme Dev handling
-  const runTaskCommand = vscode.commands.registerCommand('quickLinks.runTask', async (taskName) => {
-    const tasks = await vscode.tasks.fetchTasks();
-    const task = tasks.find(t => t.name === taskName);
-    
-    if (task) {
-      vscode.tasks.executeTask(task);
-    } else {
-      vscode.window.showErrorMessage(`Task "${taskName}" not found`);
-    }
-  });
-  
-  // Команда для оновлення дерева
-  const refreshCommand = vscode.commands.registerCommand('quickLinks.refresh', () => {
-    quickLinksProvider.refresh();
-  });
-  
-  // Pass currentThemeId to quickLinksProvider
-  quickLinksProvider.setThemeId(() => currentThemeId);
+    },
+
+    'quickLinks.setStoreHandle': async () => {
+      const config = vscode.workspace.getConfiguration('shopifyQuickLinks');
+      const newHandle = await vscode.window.showInputBox({
+        prompt: 'Enter your Shopify store handle',
+        placeholder: 'my-awesome-store (without .myshopify.com)',
+        value: config.get('storeHandle') || '',
+        validateInput: (v) => v && !/^[a-zA-Z0-9-]+$/.test(v) ? 'Only letters, numbers, and hyphens allowed' : null
+      });
+
+      if (newHandle !== undefined) {
+        await config.update('storeHandle', newHandle, vscode.ConfigurationTarget.Workspace);
+        quickLinksProvider.refresh();
+        vscode.window.showInformationMessage(newHandle ? `Store handle: ${newHandle}` : 'Using workspace name');
+      }
+    },
+
+    'quickLinks.shopifyDev': () => {
+      const storeHandle = getStoreHandle();
+      if (!storeHandle) {
+        vscode.window.showErrorMessage('No store handle configured');
+        return;
+      }
+      runInTerminal('Shopify Dev', `shopify theme dev -s ${storeHandle}`);
+    },
+
+    'quickLinks.shopifyPull': () => runInTerminal('Shopify Pull', 'shopify theme pull -d -n -o "*.json"'),
+
+    'quickLinks.refresh': () => quickLinksProvider.refresh()
+  };
 
   context.subscriptions.push(
-    treeView, 
-    openUrlCommand, 
-    openStoreUrlCommand,
-    openDynamicUrlCommand, 
-    runCommandCommand, 
-    runTaskCommand, 
-    setStoreHandleCommand,
-    refreshCommand
+    treeView,
+    ...Object.entries(commands).map(([id, handler]) => vscode.commands.registerCommand(id, handler))
   );
 }
 
 function deactivate() {}
 
-module.exports = {
-  activate,
-  deactivate,
-};
+module.exports = { activate, deactivate };
